@@ -3,7 +3,7 @@ bl_info = {
 	"author": "Desmond Liu",
 	"version": (1, 0),
 	"blender": (4, 0, 0),
-	"location": "File > Export > Stardis Input Format Export (.txt)",
+	"location": "File > Export > Stardis Input Format",
 	"description": "",
 	"category": "Import-Export",
 }
@@ -21,25 +21,107 @@ def export_custom_format(dirpath):
 	scene = bpy.context.scene
 
 	names = set()
+	media_defs = []
+	bc_defs = []
 
 	# Iterate through objects in the scene
 	for obj in scene.objects:
 		# If the object is a mesh, write vertex data
-		if obj.type == 'MESH':
+		if obj.type == 'MESH' and len(obj.stardis_object_properties) > 0:
 			# select the mesh
 			obj.select_set(True)
 
 			# export the mesh data to a file in dirpath, format stl
 			if obj.name in names:
-				# print a warning
 				print("Duplicate object name: " + obj.name)
 				continue
+			else:
+				names.add(obj.name)
 
-			names.add(obj.name)
-			filename = os.path.join(dirpath, obj.name + ".stl")
-			bpy.ops.export_mesh.stl(filepath=filename, check_existing=False, use_selection=True)
+			filename = obj.name + ".stl"
+
+			bpy.ops.export_mesh.stl(
+				filepath=os.path.join(dirpath, obj.name + ".stl"), 
+				check_existing=False, 
+				use_selection=True,
+				global_scale=1.0,
+				use_scene_unit=False,
+				use_mesh_modifiers=False,
+				ascii=True,
+			)
 
 			obj.select_set(False)
+
+			# write the object properties to the model.txt file
+			for prop in obj.stardis_object_properties:
+				prop_name = f"{obj.name}_{prop.stardis_object_type}".replace(" ", "-")
+				if prop.stardis_object_type == "SOLID":
+					solid = prop.solid
+					line = " ".join([
+						"SOLID",
+						prop_name,
+						f"{solid.conductivity:.3f}", 
+						f"{solid.rho:.3f}",
+						f"{solid.capacity:.3f}",
+						f"{solid.delta:.7f}" if not solid.delta_auto else "AUTO",
+						f"{solid.initial_temp:.3f}" if solid.imposed_temp_unknown else f"{solid.imposed_temp:.3f}",
+						f"{solid.imposed_temp:.3f}" if not solid.imposed_temp_unknown else "UNKNOWN",
+						f"{solid.volumic_power:.3f}",
+						f"{solid.triangle_sides}",
+						filename])
+
+					media_defs.append(line)
+				
+				elif prop.stardis_object_type == "DIRICHLET":
+					dirichlet = prop.dirichlet
+					line = " ".join([
+						"T_BOUNDARY_FOR_SOLID",
+						prop_name,
+						f"{dirichlet.temp:.3f}",
+						filename])
+					
+					bc_defs.append(line)
+
+				elif prop.stardis_object_type in ("ROBIN_SOLID", "ROBIN_FLUID"):
+					robin = prop.robin_solid
+					line = " ".join([
+						"H_BOUNDARY_FOR_SOLID" if prop.stardis_object_type == "ROBIN_SOLID" else "H_BOUNDARY_FOR_FLUID",
+						prop_name,
+						f"{robin.reference_temperature:.3f}",
+						f"{robin.emissivity:.3f}",
+						f"{robin.specular_fraction:.3f}",
+						f"{robin.hc:.3f}",
+						f"{robin.outside_temp:.3f}",
+						filename])
+					
+					bc_defs.append(line)
+
+				else:
+					print("Unknown object type: " + prop.stardis_object_type)
+					continue
+
+
+	model_txt = os.path.join(dirpath, "model.txt")
+	with open(model_txt, "w") as f:
+		if scene.stardis_scene_properties.use_env_radiation:
+			f.write(f"#environment_radiation\n")
+			f.write(f"TRAD {scene.stardis_scene_properties.temperature} {scene.stardis_scene_properties.reference_temperature}\n")
+			f.write("\n")
+
+		# Write the media definitions to the model.txt file
+		f.write("#media\n")
+		for line in media_defs:
+			f.write(line + "\n")
+		f.write("\n")
+
+		f.write("#boundary conditions\n")
+		for line in bc_defs:
+			f.write(line + "\n")
+		f.write("\n")
+
+
+
+
 
 # Blender Operator to handle the export
 class ExportCustomFormatOperator(bpy.types.Operator):
@@ -94,7 +176,7 @@ property_items = [
 
 # Main Panel: Custom Object Settings
 class StardisObjectPropertyPanel(bpy.types.Panel):
-	bl_label = "Stardis Object Properties"
+	bl_label = "Stardis Properties"
 	bl_idname = "StardisObjectPropertyPanel"
 	bl_space_type = 'PROPERTIES'
 	bl_region_type = 'WINDOW'
@@ -104,9 +186,15 @@ class StardisObjectPropertyPanel(bpy.types.Panel):
 		layout = self.layout
 		obj = context.object
 
+		row = layout.row()
+		row.prop(context.scene.stardis_scene_properties, "use_env_radiation")
+		row = layout.row()
+		row.prop(context.scene.stardis_scene_properties, "temperature")
+		row.prop(context.scene.stardis_scene_properties, "reference_temperature")
+
 		# display the number of properties
 		row = layout.row()
-		row.label(text="Number of Properties: " + str(len(obj.stardis_object_properties)))
+		row.label(text="Number of Object Properties: " + str(len(obj.stardis_object_properties)))
 
 		# Add a button to add a new property
 		row = layout.row()
@@ -138,12 +226,13 @@ class StardisObjectPropertyPanel(bpy.types.Panel):
 				col.prop(solid, "delta_auto", text="Auto")
 
 				row = panel.row()
+				row.prop(solid, "initial_temp")
+
+				row = panel.row()
 				col = row.split()
 				col.prop(solid, "imposed_temp")
 				col.prop(solid, "imposed_temp_unknown", text="Unknown")
 
-				row = panel.row()
-				row.prop(solid, "initial_temp")
 				row = panel.row()
 				row.prop(solid, "volumic_power")
 				col = panel.column()
@@ -156,7 +245,9 @@ class StardisObjectPropertyPanel(bpy.types.Panel):
 				row.prop(dirichlet, "temp")
 
 			elif prop.stardis_object_type in ['ROBIN_SOLID', 'ROBIN_FLUID']:
-				robin = prop.robin
+				robin = prop.robin_solid if prop.stardis_object_type == 'ROBIN_SOLID' else prop.robin_fluid
+				row = panel.row()
+				row.prop(robin, "reference_temperature")
 				row = panel.row()
 				row.prop(robin, "emissivity")
 				row = panel.row()
@@ -169,6 +260,26 @@ class StardisObjectPropertyPanel(bpy.types.Panel):
 			else:
 				row = panel.row()
 				row.label(text="No properties available for this type")
+
+class StardisSceneProperty(bpy.types.PropertyGroup):
+	use_env_radiation: bpy.props.BoolProperty(
+		name="Use Environment Radiation",
+		description="Use Environment Radiation",
+		default=False,
+	)
+	temperature: bpy.props.FloatProperty(
+		name="Temperature",
+		description="Temperature",
+		default=300.0,
+		min=0.0
+	)
+
+	reference_temperature: bpy.props.FloatProperty(
+		name="Reference Temperature",
+		description="Temperature",
+		default=300.0,
+		min=0.0
+	)
 
 
 class StardisSolidProperty(bpy.types.PropertyGroup):
@@ -206,6 +317,13 @@ class StardisSolidProperty(bpy.types.PropertyGroup):
 		min=0.0
 	)
 
+	initial_temp: bpy.props.FloatProperty(
+		name="Initial Temp",
+		description="Initial Temp",
+		default=300.0,
+		min=0.0
+	)
+
 	imposed_temp: bpy.props.FloatProperty(
 		name="Imposed Temp",
 		description="Imposed Temp",
@@ -219,12 +337,6 @@ class StardisSolidProperty(bpy.types.PropertyGroup):
 		default=True,
 	)
 
-	initial_temp: bpy.props.FloatProperty(
-		name="Initial Temp",
-		description="Initial Temp",
-		default=300.0,
-		min=0.0
-	)
 
 	volumic_power: bpy.props.FloatProperty(
 		name="Volumic Power",
@@ -253,6 +365,13 @@ class StardisDirichletProperty(bpy.types.PropertyGroup):
 	)
 
 class StardisRobinSolidProperty(bpy.types.PropertyGroup):	
+	reference_temperature: bpy.props.FloatProperty(
+		name="Reference Temperature",
+		description="Reference Temperature",
+		default=300.0,
+		min=0.0
+	)
+
 	emissivity: bpy.props.FloatProperty(
 		name="Emissivity",
 		description="Emissivity",
@@ -284,7 +403,7 @@ class StardisRobinSolidProperty(bpy.types.PropertyGroup):
 	)
 
 
-class StardisRobinFluidProperty(bpy.types.PropertyGroup):
+class StardisRobinFluidProperty(StardisRobinSolidProperty):
 	pass
 
 
@@ -311,8 +430,10 @@ def register_custom_properties():
 	bpy.utils.register_class(StardisRobinFluidProperty)
 
 	bpy.utils.register_class(StardisObjectProperty)
+	bpy.utils.register_class(StardisSceneProperty)
 
 	bpy.types.Object.stardis_object_properties = bpy.props.CollectionProperty(type=StardisObjectProperty)
+	bpy.types.Scene.stardis_scene_properties = bpy.props.PointerProperty(type=StardisSceneProperty)
 
 
 # Register and Unregister classes and properties
@@ -327,7 +448,10 @@ def unregister_custom_properties_panel():
 	bpy.utils.unregister_class(StardisRobinSolidProperty)
 	bpy.utils.unregister_class(StardisRobinFluidProperty)
 
+	bpy.utils.unregister_class(StardisSceneProperty)
+
 	del bpy.types.Object.stardis_object_properties
+	del bpy.types.Scene.stardis_scene_properties
 
 	bpy.utils.unregister_class(StardisObjectPropertyPanel)
 
