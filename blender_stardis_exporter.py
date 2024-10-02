@@ -12,7 +12,7 @@ import bpy
 import os
 
 # Function to write the scene data to a custom format
-def export_custom_format(dirpath):
+def export_stardis_format(dirpath):
 	# check if the directory exists
 	if not os.path.exists(dirpath):
 		os.makedirs(dirpath)
@@ -135,7 +135,7 @@ class ExportCustomFormatOperator(bpy.types.Operator):
 	def execute(self, context):
 		print(self.filepath)
 		actual_path = bpy.path.abspath(self.filepath)
-		export_custom_format(actual_path)
+		export_stardis_format(actual_path)
 		return {'FINISHED'}
 
 	def invoke(self, context, event):
