@@ -3,7 +3,7 @@
 A [Blender](https://blender.org) add-on that helps the user to compose a scene for thermal analysis and rendering in [Stardis](https://www.meso-star.com/projects/stardis/stardis.html). 
 With the add-on, users can specify thermal properties of meshes in a Blender scene, and export the meshes into `.stl` files, and a text file describing the thermal properties per [Stardis Input Format](https://www.meso-star.com/projects/stardis/man/man5/stardis-input.5.html). 
 
-*Only support*: 
+**Only support** these thermal properties: 
 - Media: Solid
 - Connections: None
 - Boundary conditions: Dirichlet, Robin
