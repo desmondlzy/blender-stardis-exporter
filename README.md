@@ -9,12 +9,16 @@ With the add-on, users can specify thermal properties of meshes in a Blender sce
 - Boundary conditions: Dirichlet, Robin
 
 
-
-
 ## Requirement
 
 The add-on is tested on macOS, with Blender version 4.0.
 Blender version 3+ is likely to work, but no guarantees.
+
+
+## Install
+
+- Using Blender GUI: install via `Blender Preferences -> Add-on` menu.
+- Headless: `blender -b -P blender_headless_addon_enable.py`
 
 ## Validation
 
