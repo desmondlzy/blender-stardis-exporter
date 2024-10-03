@@ -121,8 +121,6 @@ def export_stardis_format(dirpath):
 
 
 
-
-
 # Blender Operator to handle the export
 class ExportCustomFormatOperator(bpy.types.Operator):
 	"""Export scene to custom format"""
