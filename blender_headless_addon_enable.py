@@ -5,9 +5,6 @@ import bpy
 bpy.ops.preferences.addon_install(
 	filepath="./blender_stardis_exporter.py",
 	overwrite=True,
-
-	# this doesn't work for some reason
-	enable_on_install=True,  
 )
 
 bpy.ops.preferences.addon_enable(module="blender_stardis_exporter")
