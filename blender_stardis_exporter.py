@@ -434,6 +434,7 @@ def register_custom_properties():
 	bpy.types.Scene.stardis_scene_properties = bpy.props.PointerProperty(type=StardisSceneProperty)
 
 
+
 # Register and Unregister classes and properties
 def register_custom_properties_panel():
 	register_custom_properties()
