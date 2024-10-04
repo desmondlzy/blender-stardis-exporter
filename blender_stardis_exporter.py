@@ -28,8 +28,6 @@ def export_stardis_format(dirpath):
 	for obj in scene.objects:
 		# If the object is a mesh, write vertex data
 		if obj.type == 'MESH' and len(obj.stardis_object_properties) > 0:
-			# select the mesh
-			obj.select_set(True)
 
 			# export the mesh data to a file in dirpath, format stl
 			if obj.name in names:
@@ -39,6 +37,9 @@ def export_stardis_format(dirpath):
 				names.add(obj.name)
 
 			filename = obj.name + ".stl"
+
+			# select the mesh
+			obj.select_set(True)
 
 			bpy.ops.export_mesh.stl(
 				filepath=os.path.join(dirpath, obj.name + ".stl"), 
