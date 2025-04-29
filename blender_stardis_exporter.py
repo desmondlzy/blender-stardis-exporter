@@ -1,8 +1,8 @@
 bl_info = {
 	"name": "Stardis Exporter",
 	"author": "Desmond Liu",
-	"version": (1, 0),
-	"blender": (4, 0, 0),
+	"version": (1, 1),
+	"blender": (4, 4, 0),
 	"location": "File > Export > Stardis Input Format",
 	"description": "",
 	"category": "Import-Export",
@@ -36,19 +36,18 @@ def export_stardis_format(dirpath):
 			else:
 				names.add(obj.name)
 
-			filename = obj.name + ".stl"
+			filename = f"{obj.name}.stl"
 
 			# select the mesh
 			obj.select_set(True)
 
-			bpy.ops.export_mesh.stl(
-				filepath=os.path.join(dirpath, obj.name + ".stl"), 
-				check_existing=False, 
-				use_selection=True,
+			bpy.ops.wm.stl_export(
+				filepath=os.path.join(dirpath, filename),
+				check_existing=False,
+				export_selected_objects=True,
 				global_scale=1.0,
 				use_scene_unit=False,
-				use_mesh_modifiers=False,
-				ascii=True,
+				ascii_format=True,
 			)
 
 			obj.select_set(False)
@@ -126,19 +125,28 @@ def export_stardis_format(dirpath):
 class ExportCustomFormatOperator(bpy.types.Operator):
 	"""Export scene to custom format"""
 	bl_idname = "export_scene.stardis_input"
-	bl_label = "Export Stardis Input Format"
+	bl_label = "Export Stardis"
 	bl_options = {'PRESET'}
 
 	filepath: bpy.props.StringProperty(subtype='DIR_PATH', default="stardis_export")
 
 	def execute(self, context):
-		print(self.filepath)
+		print(f"Saving Stardis Scene to: {self.filepath}")
 		actual_path = bpy.path.abspath(self.filepath)
 		export_stardis_format(actual_path)
 		return {'FINISHED'}
 
 	def invoke(self, context, event):
 		# Open file browser to choose where to save the file
+		if not self.filepath or  self.filepath == context.blend_data.filepath:
+			blend_filename = context.blend_data.filepath
+			if not blend_filename:
+				blend_filename ="Untitled"
+			else:
+				blend_filename = os.path.splitext(blend_filename)[0]
+			
+			self.filepath = f"{blend_filename}_stardis"
+
 		context.window_manager.fileselect_add(self)
 		return {'RUNNING_MODAL'}
 	
