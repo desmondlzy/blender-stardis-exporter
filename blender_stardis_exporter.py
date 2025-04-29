@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "Stardis Exporter",
 	"author": "Desmond Liu",
-	"version": (1, 1),
+	"version": (1, 2),
 	"blender": (4, 4, 0),
 	"location": "File > Export > Stardis Input Format",
 	"description": "",
@@ -135,6 +135,17 @@ class ExportCustomFormatOperator(bpy.types.Operator):
 		actual_path = bpy.path.abspath(self.filepath)
 		export_stardis_format(actual_path)
 		return {'FINISHED'}
+
+
+	@classmethod
+	def poll(cls, context):
+		# check if there's at least one object with stardis properties
+		for obj in context.scene.objects:
+			if obj.type == 'MESH' and len(obj.stardis_object_properties) > 0:
+				return True
+
+		return False
+
 
 	def invoke(self, context, event):
 		# Open file browser to choose where to save the file
