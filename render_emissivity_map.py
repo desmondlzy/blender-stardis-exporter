@@ -7,10 +7,61 @@ OUTPUT_PATH = os.path.join(bpy.path.abspath("//"), "render_output.png")
 TEMP_MAT_PREFIX = "Temp_UniqueColor_"
 original_materials = {}
 world_node_backup = {}
+object_hidden = {}
+
+COLORS = [
+    (1.0, 0.0, 0.0, 1.0),  # Red
+    (0.0, 1.0, 0.0, 1.0),  # Green
+    (0.0, 0.0, 1.0, 1.0),  # Blue
+    (1.0, 1.0, 0.0, 1.0),  # Yellow
+    (1.0, 0.0, 1.0, 1.0),  # Magenta
+    (0.0, 1.0, 1.0, 1.0),  # Cyan
+    (0.5, 0.5, 0.5, 1.0),  # Gray
+]
 
 def generate_unique_color(index):
     random.seed(index)
-    return (random.random(), random.random(), random.random(), 1)
+    # return (random.random(), random.random(), random.random(), 1)
+    return COLORS[index % len(COLORS)]
+
+
+def get_emissivity_value(obj):
+    if obj.type == 'MESH' and len(obj.stardis_object_properties) > 0:
+        # write the object properties to the model.txt file
+        for prop in obj.stardis_object_properties:
+            prop_name = f"{obj.name}_{prop.stardis_object_type}".replace(" ", "-")
+            if prop.stardis_object_type == "SOLID":
+                # solid = prop.solid
+                # line = " ".join([
+                #     "SOLID",
+                #     prop_name,
+                #     f"{solid.conductivity:.3f}", 
+                #     f"{solid.rho:.3f}",
+                #     f"{solid.capacity:.3f}",
+                #     f"{solid.delta:.7f}" if not solid.delta_auto else "AUTO",
+                #     f"{solid.initial_temp:.3f}" if solid.imposed_temp_unknown else f"{solid.imposed_temp:.3f}",
+                #     f"{solid.imposed_temp:.3f}" if not solid.imposed_temp_unknown else "UNKNOWN",
+                #     f"{solid.volumic_power:.3f}",
+                #     f"{solid.triangle_sides}",
+                #     filename])
+                pass
+
+            
+            elif prop.stardis_object_type == "DIRICHLET":
+                dirichlet = prop.dirichlet
+                return 0.8
+
+            elif prop.stardis_object_type in ("ROBIN_SOLID", "ROBIN_FLUID"):
+                robin = prop.robin_solid
+                return robin.emissivity
+
+            else:
+                print("Unknown object type: " + prop.stardis_object_type)
+                continue
+
+    return 1.0 
+
+
 
 def backup_world_nodes():
     """Serializes the World node tree into a plain dict."""
@@ -87,13 +138,7 @@ def restore_world_nodes():
 
         for input_name, value in node_info.get("inputs", {}).items():
             if input_name in node.inputs:
-                print("----------")
-                print(type(node))
                 input_socket = node.inputs.get(input_name)
-                print(input_socket)
-                print(type(input_socket))
-                print("type of value", type(value))
-                input_socket = node.inputs[input_name]
                 if hasattr(input_socket, "default_value"):
                     try:
                         if isinstance(input_socket.default_value, float):
@@ -106,11 +151,7 @@ def restore_world_nodes():
                             pass  # unhandled type
                     except Exception as e:
                         print(f"⚠️ Could not assign '{input_name}': {e}") 
-                # node.inputs[input_name].default_value = value
-                # try:
-                #     node.inputs[input_name].default_value = value
-                # except:
-                #     continue  # Skip bad assignments
+
 
     for link in world_node_backup["links"]:
         from_node = name_to_node.get(link["from_node"])
@@ -143,6 +184,11 @@ def setup_render_settings():
     scene.cycles.caustics_reflective = False
     scene.cycles.caustics_refractive = False
 
+    scene.view_settings.exposure = 0.0
+    scene.view_settings.gamma = 1.0
+    scene.view_settings.view_transform = 'Raw'
+    scene.view_settings.look = 'None'
+
     for light in [obj for obj in bpy.data.objects if obj.type == 'LIGHT']:
         light.hide_render = True
 
@@ -150,8 +196,17 @@ def assign_temp_materials():
     for i, obj in enumerate(bpy.data.objects):
         if obj.type == 'MESH':
             original_materials[obj.name] = [slot.material for slot in obj.material_slots]
+            object_hidden[obj.name] = obj.hide_render
 
-            color = generate_unique_color(i)
+            emissivity = get_emissivity_value(obj)
+
+            unique_color = generate_unique_color(i)
+
+            obj.hide_render = not obj.hide_render  # Ensure the object is visible for rendering
+            color = (emissivity, emissivity, emissivity, 1.0)  # Grayscale color based on emissivity
+            # color = unique_color
+            print(f"Object: {obj.name}, Color: {color}, will be rendered? {obj.hide_render}")
+
 
             mat = bpy.data.materials.new(name=f"{TEMP_MAT_PREFIX}{i}")
             mat.use_nodes = True
@@ -180,6 +235,11 @@ def restore_original_materials():
             for mat in materials:
                 if mat:
                     obj.data.materials.append(mat)
+    
+    for obj_name, hidden in object_hidden.items():
+        obj = bpy.data.objects.get(obj_name)
+        if obj and obj.type == 'MESH':
+            obj.hide_render = hidden
 
 def delete_temp_materials():
     temp_mats = [mat for mat in bpy.data.materials if mat.name.startswith(TEMP_MAT_PREFIX)]
